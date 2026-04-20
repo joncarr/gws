@@ -22,8 +22,24 @@ gws version
 gws help
 gws setup
 gws config show
+gws auth status
 gws check connection
 gws info domain
+gws info group group@example.com
+gws info ou /Engineering
+gws info user user@example.com
+gws print group-members group@example.com
+gws print groups
+gws print ous
+gws print users
+gws add group-member group@example.com user@example.com
+gws create group group@example.com --name "Engineering"
+gws create user user@example.com --given-name Ada --family-name Lovelace --password-file ./password.txt
+gws remove group-member group@example.com user@example.com
+gws suspend user user@example.com
+gws unsuspend user user@example.com
+gws update group group@example.com --name "Engineering Team"
+gws update user user@example.com --given-name Ada --family-name Byron
 ```
 
 ## Intentional Differences
@@ -44,11 +60,19 @@ operator what credentials, APIs, scopes, and delegation steps are required.
 this project.
 
 Current setup supports Desktop OAuth clients and service accounts with
-domain-wide delegation for this initial readonly Admin SDK scope:
+domain-wide delegation for the planned initial users/groups/org-unit admin
+surface:
 
 ```text
 https://www.googleapis.com/auth/admin.directory.customer.readonly
+https://www.googleapis.com/auth/admin.directory.group
+https://www.googleapis.com/auth/admin.directory.group.member
+https://www.googleapis.com/auth/admin.directory.orgunit
+https://www.googleapis.com/auth/admin.directory.user
 ```
+
+These scopes intentionally stop short of deferred areas such as Gmail, Drive,
+Calendar, Chrome/device management, Reports, and Vault.
 
 ## Migration Expectations
 

@@ -20,6 +20,10 @@ import (
 
 var RequiredScopes = []string{
 	"https://www.googleapis.com/auth/admin.directory.customer.readonly",
+	"https://www.googleapis.com/auth/admin.directory.group",
+	"https://www.googleapis.com/auth/admin.directory.group.member",
+	"https://www.googleapis.com/auth/admin.directory.orgunit",
+	"https://www.googleapis.com/auth/admin.directory.user",
 }
 
 const (
@@ -72,6 +76,20 @@ func AuthMethod(info CredentialInfo) string {
 		return MethodServiceAccount
 	}
 	return MethodOAuth
+}
+
+func MissingRequiredScopes(scopes []string) []string {
+	have := map[string]bool{}
+	for _, scope := range scopes {
+		have[scope] = true
+	}
+	var missing []string
+	for _, scope := range RequiredScopes {
+		if !have[scope] {
+			missing = append(missing, scope)
+		}
+	}
+	return missing
 }
 
 func parseOAuthClient(raw map[string]json.RawMessage, key string) (CredentialInfo, bool) {

@@ -68,6 +68,85 @@ customers.get("my_customer")
 
 That call powers both `gws check connection` and `gws info domain`.
 
+The first readonly entity command uses Admin SDK Directory API users list:
+
+```text
+users.list(domain="<configured-domain>")
+```
+
+That call powers `gws print users`.
+
+Single-user inspection uses:
+
+```text
+users.get("user@example.com")
+```
+
+That call powers `gws info user user@example.com`.
+
+User creation uses:
+
+```text
+users.insert(user)
+```
+
+That call powers `gws create user user@example.com`.
+
+User suspension uses:
+
+```text
+users.patch("user@example.com", suspended=true|false)
+```
+
+That call powers `gws suspend user user@example.com` and
+`gws unsuspend user user@example.com`.
+
+User profile updates also use patch semantics:
+
+```text
+users.patch("user@example.com", name/orgUnitPath)
+```
+
+That call powers `gws update user user@example.com`.
+
+Readonly group commands use:
+
+```text
+groups.list(domain="<configured-domain>")
+groups.get("group@example.com")
+```
+
+Those calls power `gws print groups` and `gws info group group@example.com`.
+
+Group create/update commands use:
+
+```text
+groups.insert(group)
+groups.patch("group@example.com", group)
+```
+
+Those calls power `gws create group` and `gws update group`.
+
+Group membership commands use:
+
+```text
+members.list("group@example.com")
+members.insert("group@example.com", member)
+members.delete("group@example.com", "user@example.com")
+```
+
+Those calls power `gws print group-members`, `gws add group-member`, and
+`gws remove group-member`.
+
+Readonly org-unit commands use:
+
+```text
+orgunits.list("my_customer", orgUnitPath="/", type="allIncludingParent")
+orgunits.get("my_customer", "/Engineering")
+```
+
+Those calls power `gws print ous` and `gws info ou /Engineering`.
+
 ## Adding a Command
 
 Add a command by:

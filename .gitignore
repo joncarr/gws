@@ -27,6 +27,7 @@ dev-gws-config.json
 credentials.json
 client_secret*.json
 service-account*.json
+oauth.json
 
 # Editor and OS noise
 .DS_Store
