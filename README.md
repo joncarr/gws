@@ -30,10 +30,12 @@ gws print users
 gws add group-member group@example.com user@example.com
 gws create group group@example.com
 gws create user user@example.com
+gws create ou
 gws remove group-member group@example.com user@example.com
 gws suspend user user@example.com
 gws unsuspend user user@example.com
 gws update group group@example.com
+gws update ou /Engineering
 gws update user user@example.com
 ```
 
@@ -285,6 +287,16 @@ gws info ou /Engineering
 gws info ou /Engineering --json
 ```
 
+To create or update organizational units:
+
+```sh
+gws create ou --name Engineering --parent /
+gws create ou --name Engineering --parent / --description "Engineering users"
+gws update ou /Engineering --name ProductEngineering
+gws update ou /Engineering --parent /Departments
+gws update ou /Engineering --description "Engineering users"
+```
+
 If you authorized `gws` before a new command or scope existed, rerun `gws setup`
 so the OAuth token or domain-wide delegation grant includes the current scope
 list.
@@ -306,6 +318,6 @@ GWS_CREDENTIALS_FILE
 - user delete command
 - group delete command
 - group membership sync command
-- org-unit mutation commands
+- org-unit delete command
 - GAM grammar compatibility beyond the small first command set
 - batch and CSV execution

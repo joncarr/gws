@@ -34,11 +34,13 @@ gws print ous
 gws print users
 gws add group-member group@example.com user@example.com
 gws create group group@example.com --name "Engineering"
+gws create ou --name Engineering --parent /
 gws create user user@example.com --given-name Ada --family-name Lovelace --password-file ./password.txt
 gws remove group-member group@example.com user@example.com
 gws suspend user user@example.com
 gws unsuspend user user@example.com
 gws update group group@example.com --name "Engineering Team"
+gws update ou /Engineering --description "Engineering users"
 gws update user user@example.com --given-name Ada --family-name Byron
 ```
 

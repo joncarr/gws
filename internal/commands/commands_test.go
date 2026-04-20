@@ -87,6 +87,14 @@ func (f fakeDirectory) OrgUnit(context.Context, config.Profile, string) (google.
 	return f.ou, f.err
 }
 
+func (f fakeDirectory) CreateOrgUnit(context.Context, config.Profile, google.OrgUnitCreate) (google.OrgUnitInfo, error) {
+	return f.ou, f.err
+}
+
+func (f fakeDirectory) UpdateOrgUnit(context.Context, config.Profile, string, google.OrgUnitUpdate) (google.OrgUnitInfo, error) {
+	return f.ou, f.err
+}
+
 func TestSetupWritesConfig(t *testing.T) {
 	dir := t.TempDir()
 	credentials := filepath.Join(dir, "client.json")
@@ -973,6 +981,144 @@ func TestInfoOrgUnitRequiresPath(t *testing.T) {
 		t.Fatal("Run() error = nil")
 	}
 	if !strings.Contains(err.Error(), "Usage: gws info ou /Engineering") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestCreateOrgUnitUsesDirectoryClient(t *testing.T) {
+	dir := t.TempDir()
+	credentials := filepath.Join(dir, "client.json")
+	token := filepath.Join(dir, "token.json")
+	if err := os.WriteFile(credentials, []byte(`{"installed":{"client_id":"abc"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(token, []byte(`{"access_token":"token","token_type":"Bearer"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Empty()
+	cfg.Profiles["default"] = config.Profile{
+		Domain:          "example.com",
+		AdminSubject:    "admin@example.com",
+		CredentialsFile: credentials,
+		TokenFile:       token,
+		AuthMethod:      "oauth",
+		Scopes:          append([]string(nil), auth.RequiredScopes...),
+		Output:          "text",
+	}
+	configPath := filepath.Join(dir, "config.json")
+	if err := config.Save(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	r := Runner{
+		Stdin:  strings.NewReader(""),
+		Stdout: &out,
+		Config: configPath,
+		Directory: fakeDirectory{ou: google.OrgUnitInfo{
+			OrgUnitPath:       "/Engineering",
+			Name:              "Engineering",
+			ParentOrgUnitPath: "/",
+			Description:       "Builders",
+		}},
+	}
+	parsed, err := cli.Parse([]string{"create", "ou", "--name", "Engineering", "--parent", "/", "--description", "Builders"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Run(context.Background(), parsed); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(out.String(), "Org unit created: /Engineering") {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestCreateOrgUnitRequiresName(t *testing.T) {
+	var out bytes.Buffer
+	r := Runner{
+		Stdin:     strings.NewReader(""),
+		Stdout:    &out,
+		Config:    filepath.Join(t.TempDir(), "config.json"),
+		Directory: fakeDirectory{},
+	}
+	parsed, err := cli.Parse([]string{"create", "ou"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = r.Run(context.Background(), parsed)
+	if err == nil {
+		t.Fatal("Run() error = nil")
+	}
+	if !strings.Contains(err.Error(), "--name is required") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestUpdateOrgUnitUsesDirectoryClient(t *testing.T) {
+	dir := t.TempDir()
+	credentials := filepath.Join(dir, "client.json")
+	token := filepath.Join(dir, "token.json")
+	if err := os.WriteFile(credentials, []byte(`{"installed":{"client_id":"abc"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(token, []byte(`{"access_token":"token","token_type":"Bearer"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Empty()
+	cfg.Profiles["default"] = config.Profile{
+		Domain:          "example.com",
+		AdminSubject:    "admin@example.com",
+		CredentialsFile: credentials,
+		TokenFile:       token,
+		AuthMethod:      "oauth",
+		Scopes:          append([]string(nil), auth.RequiredScopes...),
+		Output:          "text",
+	}
+	configPath := filepath.Join(dir, "config.json")
+	if err := config.Save(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	r := Runner{
+		Stdin:  strings.NewReader(""),
+		Stdout: &out,
+		Config: configPath,
+		Directory: fakeDirectory{ou: google.OrgUnitInfo{
+			OrgUnitPath:       "/Engineering",
+			Name:              "Engineering",
+			ParentOrgUnitPath: "/",
+			Description:       "Builders",
+		}},
+	}
+	parsed, err := cli.Parse([]string{"update", "ou", "/Engineering", "--description", "Builders"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Run(context.Background(), parsed); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(out.String(), "Org unit updated: /Engineering") {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestUpdateOrgUnitRequiresChange(t *testing.T) {
+	var out bytes.Buffer
+	r := Runner{
+		Stdin:     strings.NewReader(""),
+		Stdout:    &out,
+		Config:    filepath.Join(t.TempDir(), "config.json"),
+		Directory: fakeDirectory{},
+	}
+	parsed, err := cli.Parse([]string{"update", "ou", "/Engineering"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = r.Run(context.Background(), parsed)
+	if err == nil {
+		t.Fatal("Run() error = nil")
+	}
+	if !strings.Contains(err.Error(), "nothing to update") {
 		t.Fatalf("error = %v", err)
 	}
 }

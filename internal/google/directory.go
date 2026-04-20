@@ -56,6 +56,18 @@ type OrgUnitInfo struct {
 	Description       string `json:"description,omitempty"`
 }
 
+type OrgUnitCreate struct {
+	Name              string
+	ParentOrgUnitPath string
+	Description       string
+}
+
+type OrgUnitUpdate struct {
+	Name              string
+	ParentOrgUnitPath string
+	Description       string
+}
+
 type DirectoryClient interface {
 	DomainInfo(ctx context.Context, profile config.Profile) (DomainInfo, error)
 	Users(ctx context.Context, profile config.Profile, limit int64) ([]UserInfo, error)
@@ -72,6 +84,8 @@ type DirectoryClient interface {
 	RemoveGroupMember(ctx context.Context, profile config.Profile, groupEmail string, memberEmail string) error
 	OrgUnits(ctx context.Context, profile config.Profile) ([]OrgUnitInfo, error)
 	OrgUnit(ctx context.Context, profile config.Profile, path string) (OrgUnitInfo, error)
+	CreateOrgUnit(ctx context.Context, profile config.Profile, create OrgUnitCreate) (OrgUnitInfo, error)
+	UpdateOrgUnit(ctx context.Context, profile config.Profile, path string, update OrgUnitUpdate) (OrgUnitInfo, error)
 }
 
 type UserUpdate struct {
@@ -471,6 +485,56 @@ func (AdminDirectoryClient) OrgUnit(ctx context.Context, profile config.Profile,
 		return OrgUnitInfo{}, fmt.Errorf("create Admin SDK client: %w", err)
 	}
 	ou, err := svc.Orgunits.Get("my_customer", path).Context(ctx).Do()
+	if err != nil {
+		return OrgUnitInfo{}, fmt.Errorf("call Admin SDK Directory API: %w", err)
+	}
+	return orgUnitInfo(ou), nil
+}
+
+func (AdminDirectoryClient) CreateOrgUnit(ctx context.Context, profile config.Profile, create OrgUnitCreate) (OrgUnitInfo, error) {
+	httpClient, err := auth.HTTPClient(ctx, profile)
+	if err != nil {
+		return OrgUnitInfo{}, err
+	}
+	svc, err := admin.NewService(ctx, option.WithHTTPClient(httpClient))
+	if err != nil {
+		return OrgUnitInfo{}, fmt.Errorf("create Admin SDK client: %w", err)
+	}
+	ou, err := svc.Orgunits.Insert("my_customer", &admin.OrgUnit{
+		Name:              create.Name,
+		ParentOrgUnitPath: create.ParentOrgUnitPath,
+		Description:       create.Description,
+	}).Context(ctx).Do()
+	if err != nil {
+		return OrgUnitInfo{}, fmt.Errorf("call Admin SDK Directory API: %w", err)
+	}
+	return orgUnitInfo(ou), nil
+}
+
+func (AdminDirectoryClient) UpdateOrgUnit(ctx context.Context, profile config.Profile, path string, update OrgUnitUpdate) (OrgUnitInfo, error) {
+	httpClient, err := auth.HTTPClient(ctx, profile)
+	if err != nil {
+		return OrgUnitInfo{}, err
+	}
+	svc, err := admin.NewService(ctx, option.WithHTTPClient(httpClient))
+	if err != nil {
+		return OrgUnitInfo{}, fmt.Errorf("create Admin SDK client: %w", err)
+	}
+	patch := &admin.OrgUnit{
+		Name:              update.Name,
+		ParentOrgUnitPath: update.ParentOrgUnitPath,
+		Description:       update.Description,
+	}
+	if update.Name != "" {
+		patch.ForceSendFields = append(patch.ForceSendFields, "Name")
+	}
+	if update.ParentOrgUnitPath != "" {
+		patch.ForceSendFields = append(patch.ForceSendFields, "ParentOrgUnitPath")
+	}
+	if update.Description != "" {
+		patch.ForceSendFields = append(patch.ForceSendFields, "Description")
+	}
+	ou, err := svc.Orgunits.Patch("my_customer", path, patch).Context(ctx).Do()
 	if err != nil {
 		return OrgUnitInfo{}, fmt.Errorf("call Admin SDK Directory API: %w", err)
 	}

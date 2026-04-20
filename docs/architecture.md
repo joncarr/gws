@@ -147,6 +147,15 @@ orgunits.get("my_customer", "/Engineering")
 
 Those calls power `gws print ous` and `gws info ou /Engineering`.
 
+Org-unit create/update commands use:
+
+```text
+orgunits.insert("my_customer", orgUnit)
+orgunits.patch("my_customer", "/Engineering", orgUnit)
+```
+
+Those calls power `gws create ou` and `gws update ou`.
+
 ## Adding a Command
 
 Add a command by:

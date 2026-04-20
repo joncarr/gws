@@ -41,6 +41,8 @@ func (r Runner) Run(ctx context.Context, parsed cli.Parsed) error {
 		return r.addGroupMember(ctx, parsed.Positionals, parsed.Flags)
 	case "create group":
 		return r.createGroup(ctx, parsed.Positionals, parsed.Flags)
+	case "create ou":
+		return r.createOrgUnit(ctx, parsed.Flags)
 	case "create user":
 		return r.createUser(ctx, parsed.Positionals, parsed.Flags)
 	case "remove group-member":
@@ -51,6 +53,8 @@ func (r Runner) Run(ctx context.Context, parsed cli.Parsed) error {
 		return r.setUserSuspended(ctx, parsed.Positionals, parsed.Flags, false)
 	case "update group":
 		return r.updateGroup(ctx, parsed.Positionals, parsed.Flags)
+	case "update ou":
+		return r.updateOrgUnit(ctx, parsed.Positionals, parsed.Flags)
 	case "update user":
 		return r.updateUser(ctx, parsed.Positionals, parsed.Flags)
 	case "config show":
@@ -111,11 +115,13 @@ func (r Runner) help() {
 	w.Println("  gws print users [--limit 100] [--json]")
 	w.Println("  gws add group-member group@example.com user@example.com [--role MEMBER] [--json]")
 	w.Println("  gws create group group@example.com --name NAME [--description TEXT] [--json]")
+	w.Println("  gws create ou --name NAME --parent /PATH [--description TEXT] [--json]")
 	w.Println("  gws create user user@example.com --given-name NAME --family-name NAME --password-file PATH [--org-unit /PATH] [--json]")
 	w.Println("  gws remove group-member group@example.com user@example.com")
 	w.Println("  gws suspend user user@example.com [--json]")
 	w.Println("  gws unsuspend user user@example.com [--json]")
 	w.Println("  gws update group group@example.com [--name NAME] [--description TEXT] [--json]")
+	w.Println("  gws update ou /PATH [--name NAME] [--parent /PATH] [--description TEXT] [--json]")
 	w.Println("  gws update user user@example.com [--given-name NAME] [--family-name NAME] [--org-unit /PATH] [--json]")
 	w.Println("")
 	w.Println("Setup guides you through credentials, scopes, authorization, saved files, and a real Admin SDK validation.")
@@ -594,6 +600,59 @@ func (r Runner) infoOrgUnit(ctx context.Context, args []string, flags map[string
 	return nil
 }
 
+func (r Runner) createOrgUnit(ctx context.Context, flags map[string]string) error {
+	name := strings.TrimSpace(flags["name"])
+	if name == "" {
+		return errors.New("--name is required when creating an org unit")
+	}
+	parent := normalizeOrgUnitPath(flags["parent"])
+	if flags["parent"] == "" {
+		parent = "/"
+	}
+	profile, err := r.activeProfile()
+	if err != nil {
+		return err
+	}
+	ou, err := r.Directory.CreateOrgUnit(ctx, profile, google.OrgUnitCreate{
+		Name:              name,
+		ParentOrgUnitPath: parent,
+		Description:       strings.TrimSpace(flags["description"]),
+	})
+	if err != nil {
+		return explainAPICommandFailure(profile, "create ou", err)
+	}
+	return printOrgUnitResult(r.Stdout, ou, flags["json"] == "true", "Org unit created")
+}
+
+func (r Runner) updateOrgUnit(ctx context.Context, args []string, flags map[string]string) error {
+	if len(args) < 3 || strings.TrimSpace(args[2]) == "" {
+		return errors.New("org unit path is required\n\nUsage: gws update ou /Engineering [--name NAME] [--parent /PATH] [--description TEXT]")
+	}
+	name, hasName := flags["name"]
+	parent, hasParent := flags["parent"]
+	description, hasDescription := flags["description"]
+	if !hasName && !hasParent && !hasDescription {
+		return errors.New("nothing to update; provide --name, --parent, or --description")
+	}
+	update := google.OrgUnitUpdate{
+		Name:        strings.TrimSpace(name),
+		Description: strings.TrimSpace(description),
+	}
+	if hasParent {
+		update.ParentOrgUnitPath = normalizeOrgUnitPath(parent)
+	}
+	path := normalizeOrgUnitPath(args[2])
+	profile, err := r.activeProfile()
+	if err != nil {
+		return err
+	}
+	ou, err := r.Directory.UpdateOrgUnit(ctx, profile, path, update)
+	if err != nil {
+		return explainAPICommandFailure(profile, "update ou", err)
+	}
+	return printOrgUnitResult(r.Stdout, ou, flags["json"] == "true", "Org unit updated")
+}
+
 func (r Runner) printGroups(ctx context.Context, flags map[string]string) error {
 	profile, err := r.activeProfile()
 	if err != nil {
@@ -702,6 +761,22 @@ func printGroupResult(out io.Writer, group google.GroupInfo, asJSON bool, label 
 	}
 	if group.Description != "" {
 		w.Printf("Description: %s\n", group.Description)
+	}
+	return nil
+}
+
+func printOrgUnitResult(out io.Writer, ou google.OrgUnitInfo, asJSON bool, label string) error {
+	w := output.New(out)
+	if asJSON {
+		return w.JSON(ou)
+	}
+	w.Printf("%s: %s\n", label, ou.OrgUnitPath)
+	w.Printf("Name: %s\n", ou.Name)
+	if ou.ParentOrgUnitPath != "" {
+		w.Printf("Parent path: %s\n", ou.ParentOrgUnitPath)
+	}
+	if ou.Description != "" {
+		w.Printf("Description: %s\n", ou.Description)
 	}
 	return nil
 }
