@@ -71,10 +71,31 @@ That call powers both `gws check connection` and `gws info domain`.
 The first readonly entity command uses Admin SDK Directory API users list:
 
 ```text
-users.list(domain="<configured-domain>")
+users.list(domain="<configured-domain>", query="<optional-query>")
 ```
 
-That call powers `gws print users`.
+That call powers `gws print users`. User list flags are translated into a
+small `google.UserListOptions` value before reaching the Directory client, so
+command parsing stays separate from Google API parameter mapping. When
+`--limit all` is used, the Directory client follows `nextPageToken` until every
+page has been collected. Output shaping stays in `internal/commands`: the
+command selects explicit user field specs and renders text tables, CSV, or JSON
+without teaching the Google client about presentation concerns. Google Sheets
+export reuses those same row builders and goes through a separate thin
+`internal/google` Sheets client. The same command layer also translates common
+Google API failures into clearer user-facing explanations for missing scopes,
+disabled APIs, delegation/auth problems, and invalid request payloads.
+
+Batch execution lives in `internal/batch/` as a small reusable engine. It
+parses line-based command files into argument slices, then runs them through a
+bounded worker pool via an executor callback. That keeps concurrency policy and
+batch-file parsing out of `main.go` and out of the normal CLI parser. The same
+package now also expands CSV rows into commands through a lightweight
+`{{column}}` template renderer before handing those commands to the same worker
+pool. Per-command timeout handling stays in the command layer so the reusable
+batch engine does not need to know about CLI duration flags or child runner
+construction. Common CSV workflows are exposed as small command-layer helpers
+that print recommended headers plus a matching `gws batch csv` template.
 
 Single-user inspection uses:
 
@@ -104,19 +125,34 @@ That call powers `gws suspend user user@example.com` and
 User profile updates also use patch semantics:
 
 ```text
-users.patch("user@example.com", name/orgUnitPath)
+users.patch("user@example.com", name/orgUnitPath/recovery/profile fields)
 ```
 
-That call powers `gws update user user@example.com`.
+That call powers `gws update user user@example.com`. The CLI maps simple scalar
+flags directly and uses explicit `*-json` flags for nested Admin SDK profile
+arrays like phones or organizations.
+
+User deletion uses:
+
+```text
+users.delete("user@example.com")
+```
+
+That call powers `gws delete user user@example.com --confirm`.
 
 Readonly group commands use:
 
 ```text
-groups.list(domain="<configured-domain>")
+groups.list(domain="<configured-domain>", query="<optional-query>")
 groups.get("group@example.com")
 ```
 
 Those calls power `gws print groups` and `gws info group group@example.com`.
+Group list flags are translated into `google.GroupListOptions`, and `print
+groups --limit all` follows `nextPageToken` until the full result set is read.
+Like user lists, group list output uses explicit field specs instead of
+reflection so column ordering and field names stay stable. The same field and
+row definitions are reused for CSV and Google Sheets export.
 
 Group create/update commands use:
 
@@ -127,6 +163,14 @@ groups.patch("group@example.com", group)
 
 Those calls power `gws create group` and `gws update group`.
 
+Group deletion uses:
+
+```text
+groups.delete("group@example.com")
+```
+
+That call powers `gws delete group group@example.com --confirm`.
+
 Group membership commands use:
 
 ```text
@@ -136,7 +180,12 @@ members.delete("group@example.com", "user@example.com")
 ```
 
 Those calls power `gws print group-members`, `gws add group-member`, and
-`gws remove group-member`.
+`gws remove group-member`. `gws sync group-members` uses the full
+`members.list` result to compute a desired/current difference, then applies
+`members.insert`, `members.patch`, and `members.delete` for adds, role
+changes, and removals. The sync command can build that desired state either
+from flat email input (`--members` / `--members-file`) or from explicit-role
+CSV/Sheets input (`--members-csv` / `--members-sheet`).
 
 Readonly org-unit commands use:
 
@@ -155,6 +204,14 @@ orgunits.patch("my_customer", "/Engineering", orgUnit)
 ```
 
 Those calls power `gws create ou` and `gws update ou`.
+
+Org-unit deletion uses:
+
+```text
+orgunits.delete("my_customer", "/Engineering")
+```
+
+That call powers `gws delete ou /Engineering --confirm`.
 
 ## Adding a Command
 

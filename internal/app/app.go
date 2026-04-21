@@ -45,6 +45,8 @@ func Execute(ctx context.Context, args []string, opts Options) (int, error) {
 		Stderr:    opts.Stderr,
 		Config:    configPath,
 		Directory: google.AdminDirectoryClient{},
+		Gmail:     google.AdminGmailClient{},
+		Sheets:    google.AdminSheetsExporter{},
 	}
 	if err := runner.Run(ctx, parsed); err != nil {
 		logging.Error(opts.Stderr, err)
