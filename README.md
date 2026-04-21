@@ -1,126 +1,102 @@
 # gws
 
 `gws` is a Go command-line tool for administering Google Workspace environments.
-It is inspired by GAMADV-XTD3 command wording, but it is not a line-by-line port.
-The project favors a clean, idiomatic Go foundation that can grow in small,
-testable slices.
+It borrows familiar command wording from GAMADV-XTD3 where that helps, but it is
+not a line-by-line port. The goal is a clean, idiomatic Go codebase with a
+strong setup experience, a reusable execution core, and incremental feature
+growth.
 
-The first priority is connection and authorization. Broad command coverage comes
-later.
+The current project state is focused on:
 
-## Current Scope
+- guided authentication and configuration
+- core Admin SDK directory administration
+- structured output for terminal, JSON, CSV, and Google Sheets
+- bounded-concurrency batch execution
+- first-pass Gmail delegate administration
 
-Implemented first-pass commands:
+## Status
 
-```text
-gws version
-gws help
-gws setup
-gws config show
-gws auth status
-gws check connection
-gws info domain
-gws info domain example.com
-gws info domain-alias alias.example.com
-gws info group group@example.com
-gws info group-member group@example.com user@example.com
-gws info ou /Engineering
-gws info user user@example.com
-gws print group-aliases group@example.com
-gws print group-members group@example.com
-gws print groups
-gws print ous
-gws print user-aliases user@example.com
-gws print users
-gws print domains
-gws print domain-aliases
-gws add group-member group@example.com user@example.com
-gws create domain example.com
-gws create domain-alias alias.example.com --parent example.com
-gws create group-alias group@example.com alias@example.com
-gws create group group@example.com
-gws create user-alias user@example.com alias@example.com
-gws create user user@example.com
-gws create ou
-gws delete domain example.com
-gws delete domain-alias alias.example.com
-gws delete group-alias group@example.com alias@example.com
-gws delete group group@example.com
-gws delete ou /Engineering
-gws delete user-alias user@example.com alias@example.com
-gws delete user user@example.com
-gws remove group-member group@example.com user@example.com
-gws sync group-members group@example.com
-gws make admin user@example.com
-gws revoke admin user@example.com
-gws suspend user user@example.com
-gws unsuspend user user@example.com
-gws update group group@example.com
-gws update group-member group@example.com user@example.com
-gws update ou /Engineering
-gws update user user@example.com
-```
+`gws` is usable now for a meaningful set of Google Workspace admin workflows,
+but it is still early-stage software.
 
-`gws setup` creates a local profile, validates the Google credentials file,
-guides authorization, explains the required Admin SDK scope, shows the files it
-creates, and finishes with a real Admin SDK connection check.
+What is solid today:
 
-## Build and Run
+- guided `gws setup` flow
+- profile/config management
+- Admin SDK connectivity validation
+- users, groups, org units, domains, aliases
+- group membership sync, including role-aware sync
+- list filtering, pagination, field selection, CSV/JSON output, Sheets export
+- batch execution groundwork
+- Gmail delegate create/list/delete/info
+
+What is still incomplete:
+
+- no full GAM grammar compatibility
+- no full Google Workspace product coverage
+- no live integration test suite checked into the repo yet
+- setup still requires manual Google Cloud and Admin Console work
+- Gmail support is limited to mailbox delegate settings, not message operations
+
+## Build
 
 ```sh
 go build ./cmd/gws
 ./gws help
-./gws setup
 ```
 
-Use a custom config path during development:
+During development, keep config isolated:
 
 ```sh
-gws --config ./gws-config.json setup
-gws --config ./gws-config.json config show
+./gws --config ./dev-gws-config.json setup
+./gws --config ./dev-gws-config.json config show
 ```
 
-## Setup and Authentication
+## Quick Start
 
-This first slice supports:
+If you want the fastest path to a working `gws` install:
 
-- a Desktop OAuth client JSON from Google Cloud Console
-- a service account JSON configured for Google Workspace domain-wide delegation
-
-### Fastest Path
-
-If you want to get `gws` working quickly:
-
-1. In **Google Cloud Console**, create or choose a project.
-2. Enable these APIs:
-   - **Admin SDK API**
-   - **Google Sheets API** if you want to use `--sheet`
-3. Create a **Desktop app** OAuth client.
-4. Download the OAuth client JSON file.
+1. Create or choose a Google Cloud project.
+2. Enable:
+   - `Admin SDK API`
+   - `Google Sheets API`
+   - `Gmail API` if you want Gmail delegate commands
+3. Create a Desktop OAuth client.
+4. Download the client JSON.
 5. Run:
 
 ```sh
 go build -o gws ./cmd/gws
 ./gws setup
 ./gws check connection
+./gws print users --limit 5
 ```
 
-Use a Google Workspace admin account when Google asks you to authorize.
+If you later want Gmail delegate management, create a service account profile
+with domain-wide delegation and rerun `gws setup` using the service account key.
 
-### What To Enable In Google Cloud
+## Setup and Authentication
 
-Your Google Cloud project should enable these APIs:
+`gws` currently supports two credential types:
 
-- **Admin SDK API**: required for core Google Workspace admin commands
-- **Gmail API**: required for Gmail delegate management commands
-- **Google Sheets API**: required for `print users --sheet` and
-  `print groups --sheet`
+- Desktop OAuth client JSON
+- service account JSON with domain-wide delegation
 
-If you do not plan to use Gmail delegation or `--sheet` yet, `gws` still works
-best when all current scopes are authorized up front. If you add a feature
-later and your token or delegation grant is older, rerun `gws setup`.
+OAuth is the easiest way to get started for Admin SDK commands. Service accounts
+are required for Gmail delegate management.
 
-Setup asks for the scopes needed for the current command set:
+### APIs to enable
+
+Enable these APIs in Google Cloud Console:
+
+- `Admin SDK API`: required for core Workspace admin commands
+- `Google Sheets API`: required for `--sheet`
+- `Gmail API`: required for Gmail delegate commands
+
+### Required scopes
+
+`gws setup` asks Google for the current scope set used by the implemented
+commands:
 
 ```text
 https://www.googleapis.com/auth/admin.directory.customer.readonly
@@ -135,102 +111,82 @@ https://www.googleapis.com/auth/gmail.settings.sharing
 https://www.googleapis.com/auth/spreadsheets
 ```
 
-These cover the current Admin SDK commands, Google Sheets export, and Gmail
-delegate management. Gmail delegate commands specifically require a service
-account profile with domain-wide delegation; OAuth user tokens cannot manage
-delegates through the Gmail API.
+If scopes change after you already authorized `gws`, rerun:
 
-### What `gws setup` Needs From You
+```sh
+./gws setup
+```
 
-`gws setup` will ask for:
+### What `gws setup` asks for
+
+`gws setup` guides you through:
+
+1. requirements and required scopes
+2. profile details
+3. credential validation
+4. authorization or delegation expectations
+5. a real Admin SDK validation call
+
+The prompts ask for:
 
 - profile name
-- primary Google Workspace domain
-- Google Workspace admin email used for validation
-- path to the OAuth client JSON or service account JSON file
+- primary Workspace domain
+- Workspace admin email used for validation and impersonation
+- path to OAuth client JSON or service account JSON
 
-For OAuth, setup will:
+### OAuth setup
 
-- validate the credentials JSON
+Use OAuth if you want the easiest path to get `gws` working for Admin SDK
+commands.
+
+You need:
+
+1. a Google Cloud project
+2. `Admin SDK API` enabled
+3. a configured OAuth consent screen
+4. a Desktop OAuth client
+5. the downloaded OAuth client JSON
+
+Then run:
+
+```sh
+./gws setup
+```
+
+Setup will:
+
+- validate the JSON file
 - print an authorization URL
 - start a temporary localhost callback listener
-- save the OAuth token
-- validate real Admin SDK access
+- save an OAuth token
+- validate the resulting Admin SDK access
 
-For service accounts, setup will:
-
-- validate the service account JSON
-- show the service account client ID
-- remind you to authorize domain-wide delegation scopes in the Google Admin console
-- validate by impersonating the configured admin subject
-
-### Recommended First-Time Setup
-
-The easiest way to test `gws` today is with a **Desktop OAuth client**.
-
-Google Workspace and Google Cloud are separate admin surfaces:
-
-- **Google Workspace Admin Console** is where your Workspace domain, users,
-  groups, and admin permissions live.
-- **Google Cloud Console** is where you create API credentials so a tool like
-  `gws` can call Google Workspace APIs.
-
-For this first setup, you create credentials in Google Cloud Console, then sign
-in with a Google Workspace admin account during OAuth authorization.
-
-1. Open Google Cloud Console.
-2. Create or choose a Google Cloud project.
-3. Go to **APIs & Services > Library**.
-4. Enable **Admin SDK API**.
-5. Enable **Google Sheets API** if you want `--sheet` export.
-6. Go to **APIs & Services > OAuth consent screen** and complete the required
-   consent screen setup for your organization.
-7. Go to **APIs & Services > Credentials**.
-8. Select **Create credentials > OAuth client ID**.
-9. Choose **Desktop app** as the application type.
-10. Download the JSON credentials file.
-
-When `gws setup` asks:
+When setup prompts with:
 
 ```text
 Path to OAuth client or service account JSON:
 ```
 
-enter the path to that downloaded file, for example:
+provide the path to the downloaded OAuth client JSON file.
 
-```text
-/home/username/Downloads/client_secret_1234567890.apps.googleusercontent.com.json
-```
+### Service account setup
 
-Then run setup:
+Use a service account if you want domain-wide delegation or Gmail delegate
+commands.
 
-```sh
-go build -o gws ./cmd/gws
-./gws setup
-```
+You need:
 
-For development, use a local config file so you do not overwrite your normal
-profile:
+1. a Google Cloud project
+2. `Admin SDK API` enabled
+3. `Gmail API` enabled for Gmail delegate commands
+4. `Google Sheets API` enabled for `--sheet`
+5. a service account with domain-wide delegation enabled
+6. a JSON key for that service account
+7. the service account client ID authorized in Google Admin Console under
+   domain-wide delegation
 
-```sh
-./gws --config ./dev-gws-config.json setup
-./gws --config ./dev-gws-config.json check connection
-```
-
-### Service Account Setup
-
-Use a service account only if you specifically want domain-wide delegation.
-
-1. In Google Cloud Console, create a service account.
-2. Enable domain-wide delegation for that service account.
-3. Enable **Admin SDK API** in the Google Cloud project.
-4. Enable **Gmail API** if you want Gmail delegate management.
-5. Enable **Google Sheets API** if you want `--sheet` export.
-6. Create and download a JSON key for the service account.
-7. Copy the service account's numeric client ID.
-8. In Google Admin Console, go to **Security > Access and data control > API
-   controls > Domain-wide delegation**.
-9. Add the service account client ID with these scopes:
+Authorize these scopes in the Google Admin Console for the service account
+client ID:
 
 ```text
 https://www.googleapis.com/auth/admin.directory.customer.readonly
@@ -245,111 +201,125 @@ https://www.googleapis.com/auth/gmail.settings.sharing
 https://www.googleapis.com/auth/spreadsheets
 ```
 
-When `gws setup` asks for the credentials path, enter the downloaded service
-account JSON key path.
-
-It then writes a config file like:
-
-```json
-{
-  "active_profile": "default",
-  "profiles": {
-    "default": {
-      "domain": "example.com",
-      "admin_subject": "admin@example.com",
-      "credentials_file": "/path/to/client.json",
-      "token_file": "/home/user/.config/gws/tokens/default-token.json",
-      "auth_method": "oauth",
-      "scopes": [
-        "https://www.googleapis.com/auth/admin.directory.customer.readonly",
-        "https://www.googleapis.com/auth/admin.directory.domain",
-        "https://www.googleapis.com/auth/admin.directory.group",
-        "https://www.googleapis.com/auth/admin.directory.group.member",
-        "https://www.googleapis.com/auth/admin.directory.orgunit",
-        "https://www.googleapis.com/auth/admin.directory.user",
-        "https://www.googleapis.com/auth/admin.directory.user.alias",
-        "https://www.googleapis.com/auth/gmail.settings.basic",
-        "https://www.googleapis.com/auth/gmail.settings.sharing",
-        "https://www.googleapis.com/auth/spreadsheets"
-      ],
-      "output": "text"
-    }
-  }
-}
-```
-
-OAuth tokens are stored with `0600` permissions at the configured token path.
-Service account profiles do not use a token file.
-
-### First Commands To Run After Setup
-
-These are the quickest checks that `gws` is really connected:
+Then rerun:
 
 ```sh
-gws auth status
+./gws setup
+```
+
+using the service account JSON path when prompted.
+
+### Config files and tokens
+
+`gws setup` writes a config profile that records:
+
+- active profile
+- Workspace domain
+- admin subject
+- credentials file
+- auth method
+- token file for OAuth profiles
+- scope list
+- default output mode
+
+OAuth token files are written with `0600` permissions. Service account profiles
+do not use a token file.
+
+### First commands after setup
+
+These are the quickest sanity checks:
+
+```sh
+./gws auth status
+./gws check connection
+./gws info domain
+./gws print users --limit 5
+./gws print groups --limit 5
+```
+
+## Command Surface
+
+The easiest way to inspect the live command surface is:
+
+```sh
+./gws help
+```
+
+Current commands are grouped below by area.
+
+### Getting started
+
+```text
+gws version
+gws help
+gws setup [--profile default] [--domain example.com] [--admin admin@example.com] [--credentials client.json]
+```
+
+### Configuration and auth
+
+```text
+gws config show [--json]
+gws auth status [--json]
 gws check connection
-gws info domain
-gws print users --limit 5
-gws print groups --limit 5
 ```
 
-If `gws` reports missing scopes or insufficient permissions after you upgrade to
-a newer version, rerun:
+### Domain commands
 
-```sh
-gws setup
-```
-
-That refreshes the saved config and makes Google issue a token with the current
-scope list.
-
-After setup, run either validation command at any time:
-
-```sh
-gws auth status
-gws check connection
-gws info domain
-```
-
-To list and inspect Workspace domains and domain aliases:
-
-```sh
-gws print domains
-gws print domains --fields domainName,isPrimary --format csv
-gws print domains --fields domainName,verified --sheet
-gws info domain example.com
-gws create domain secondary.example.com
-gws delete domain secondary.example.com --confirm
-gws print domain-aliases
-gws print domain-aliases --fields domainAliasName,parentDomainName --format csv
-gws info domain-alias alias.example.com
-gws create domain-alias alias.example.com --parent example.com
+```text
+gws info domain [example.com]
+gws info domain-alias alias.example.com [--json]
+gws print domains [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws print domain-aliases [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws create domain example.com [--json]
+gws create domain-alias alias.example.com --parent example.com [--json]
+gws delete domain example.com --confirm
 gws delete domain-alias alias.example.com --confirm
 ```
 
-To list users from the configured Workspace domain:
+Examples:
 
 ```sh
-gws print users
-gws print users --limit 25
-gws print users --limit all
-gws print users --domain example.com
-gws print users --query "isSuspended=false"
-gws print users --org-unit /Engineering
-gws print users --sort familyName --order asc
-gws print users --show-deleted
-gws print users --fields primaryEmail,name,suspended
-gws print users --fields primaryEmail,orgUnitPath --format csv
-gws print users --fields primaryEmail,orgUnitPath --format json
-gws print users --fields primaryEmail,name --sheet
-gws print users --json
+./gws print domains
+./gws print domains --fields domainName,isPrimary --format csv
+./gws print domains --fields domainName,verified --sheet
+./gws info domain example.com
+./gws print domain-aliases --fields domainAliasName,parentDomainName --format csv
 ```
 
-`--query` is passed to the Admin SDK Directory API user search parameter. You
-can combine it with `--org-unit`; `gws` appends an `orgUnitPath='/PATH'` search
-clause for you.
+### User commands
 
-Supported user fields for `--fields`:
+```text
+gws info user user@example.com [--json]
+gws print users [--limit 100|all] [--domain example.com] [--org-unit /PATH] [--query QUERY] [--show-deleted] [--sort email|familyName|givenName] [--order asc|desc] [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws print user-aliases user@example.com [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws create user user@example.com --given-name NAME --family-name NAME --password-file PATH [--org-unit /PATH] [--json]
+gws create user-alias user@example.com alias@example.com [--json]
+gws update user user@example.com [--given-name NAME] [--family-name NAME] [--org-unit /PATH] [--recovery-email addr@example.com] [--recovery-phone +15551234567] [--change-password-at-next-login true|false] [--archived true|false] [--include-in-global-address-list true|false] [--phones-json JSON] [--addresses-json JSON] [--organizations-json JSON] [--locations-json JSON] [--relations-json JSON] [--external-ids-json JSON] [--json]
+gws suspend user user@example.com [--json]
+gws unsuspend user user@example.com [--json]
+gws make admin user@example.com
+gws revoke admin user@example.com
+gws delete user user@example.com --confirm
+gws delete user-alias user@example.com alias@example.com --confirm
+```
+
+Examples:
+
+```sh
+./gws print users --limit 25
+./gws print users --limit all --query "isSuspended=false"
+./gws print users --org-unit /Engineering --sort familyName --order asc
+./gws print users --fields primaryEmail,orgUnitPath --format csv
+./gws print users --fields primaryEmail,name --sheet
+./gws info user user@example.com
+./gws create user user@example.com --given-name Ada --family-name Lovelace --password-file ./password.txt
+./gws update user user@example.com --recovery-email recover@example.com --recovery-phone +15551234567
+./gws update user user@example.com --phones-json '[{"value":"+15551234567","type":"work","primary":true}]'
+./gws suspend user user@example.com
+./gws make admin user@example.com
+```
+
+Supported `print users --fields` keys:
 
 ```text
 primaryEmail, name, givenName, familyName, suspended, archived,
@@ -361,163 +331,64 @@ addresses, organizations, relations, externalIDs, locations, id,
 creationTime, lastLoginTime, deletionTime
 ```
 
-`--sheet` creates a new Google Sheet owned by the authenticated account, writes
-the selected columns, and prints the spreadsheet URL. If your profile was set
-up before Sheets export existed, rerun `gws setup` so the saved token includes
-the Google Sheets scope.
+### Group commands
 
-When Google rejects a command, `gws` tries to explain whether the problem is
-missing scopes, a disabled API, service-account delegation, or an invalid query
-or update payload.
-
-To inspect one user:
-
-```sh
-gws info user user@example.com
-gws info user user@example.com --json
+```text
+gws info group group@example.com [--json]
+gws info group-member group@example.com member@example.com [--json]
+gws print groups [--limit 100|all] [--domain example.com] [--user user@example.com] [--query QUERY] [--sort email] [--order asc|desc] [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws print group-members group@example.com [--limit 100] [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws print group-aliases group@example.com [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws create group group@example.com --name NAME [--description TEXT] [--json]
+gws create group-alias group@example.com alias@example.com [--json]
+gws update group group@example.com [--email new-group@example.com] [--name NAME] [--description TEXT] [--json]
+gws add group-member group@example.com user@example.com [--role MEMBER] [--json]
+gws update group-member group@example.com member@example.com --role OWNER|MANAGER|MEMBER [--json]
+gws remove group-member group@example.com user@example.com
+gws sync group-members group@example.com (--members user1@example.com,user2@example.com | --members-file PATH | --members-csv PATH | --members-sheet SHEET_ID_OR_URL [--sheet-range RANGE]) [--role MEMBER] [--ignore-role] [--dry-run] [--confirm]
+gws delete group group@example.com --confirm
+gws delete group-alias group@example.com alias@example.com --confirm
 ```
 
-To create a user, prefer `--password-file` so the initial password is not stored
-in shell history:
+Examples:
 
 ```sh
-gws create user user@example.com --given-name Ada --family-name Lovelace --password-file ./password.txt
-gws create user user@example.com --given-name Ada --family-name Lovelace --password-file ./password.txt --org-unit /Engineering
-gws create user user@example.com --given-name Ada --family-name Lovelace --password-file ./password.txt --change-password-at-next-login false
+./gws print groups --limit all
+./gws print groups --user user@example.com
+./gws print groups --query "email:engineering" --sort email --order desc
+./gws print groups --fields email,directMembersCount --format csv
+./gws print group-members group@example.com --fields email,role,status --sheet
+./gws create group group@example.com --name "Engineering"
+./gws update group group@example.com --email engineering@example.com
+./gws add group-member group@example.com user@example.com --role MANAGER
+./gws update group-member group@example.com user@example.com --role OWNER
+./gws sync group-members group@example.com --members ada@example.com,grace@example.com --dry-run
+./gws sync group-members group@example.com --members ada@example.com --role MANAGER --dry-run
+./gws sync group-members group@example.com --members-file ./members.txt --ignore-role --confirm
+./gws sync group-members group@example.com --members-csv ./members.csv --dry-run
+./gws sync group-members group@example.com --members-sheet https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit --sheet-range "Members!A:B" --confirm
 ```
 
-To suspend or unsuspend a user:
-
-```sh
-gws suspend user user@example.com
-gws unsuspend user user@example.com
-```
-
-To grant or revoke super administrator status:
-
-```sh
-gws make admin user@example.com
-gws revoke admin user@example.com
-```
-
-To update a user:
-
-```sh
-gws update user user@example.com --given-name Ada
-gws update user user@example.com --family-name Byron
-gws update user user@example.com --org-unit /Engineering
-gws update user user@example.com --given-name Ada --family-name Byron --org-unit /Engineering
-gws update user user@example.com --recovery-email recover@example.com --recovery-phone +15551234567
-gws update user user@example.com --change-password-at-next-login true --include-in-global-address-list false
-gws update user user@example.com --phones-json '[{"value":"+15551234567","type":"work","primary":true}]'
-gws update user user@example.com --organizations-json '[{"name":"Example Corp","title":"Staff Engineer","primary":true}]'
-gws update user user@example.com --archived true
-```
-
-Structured profile flags use raw JSON because the Admin SDK accepts nested
-arrays/objects for values like phones, addresses, organizations, locations,
-relations, and external IDs.
-
-To delete a user:
-
-```sh
-gws delete user user@example.com --confirm
-```
-
-To manage user aliases:
-
-```sh
-gws print user-aliases user@example.com
-gws print user-aliases user@example.com --fields alias,primaryEmail --format csv
-gws create user-alias user@example.com alias@example.com
-gws delete user-alias user@example.com alias@example.com --confirm
-```
-
-To list and inspect groups from the configured Workspace domain:
-
-```sh
-gws print groups
-gws print groups --limit 25
-gws print groups --limit all
-gws print groups --domain example.com
-gws print groups --user user@example.com
-gws print groups --query "email:engineering"
-gws print groups --sort email --order desc
-gws print groups --fields email,name,directMembersCount
-gws print groups --fields email,directMembersCount --format csv
-gws print groups --fields email,directMembersCount --format json
-gws print groups --fields email,name --sheet
-gws print groups --json
-gws info group group@example.com
-gws info group group@example.com --json
-```
-
-`--user` lists groups for a specific member. `--query` is passed to the Admin
-SDK Directory API group search parameter.
-
-Supported group fields for `--fields`:
+Supported `print groups --fields` keys:
 
 ```text
 email, name, description, directMembersCount, adminCreated, aliases,
 nonEditableAliases, id, etag, kind
 ```
 
-To create or update a group:
+`sync group-members` behavior:
 
-```sh
-gws create group group@example.com --name "Engineering"
-gws create group group@example.com --name "Engineering" --description "Engineering team"
-gws update group group@example.com --name "Engineering Team"
-gws update group group@example.com --description "Primary engineering discussion group"
-gws update group group@example.com --email engineering@example.com
-```
+- `--members` or `--members-file`: sync against a flat list of emails
+- `--role`: target a specific role such as `MEMBER`, `MANAGER`, or `OWNER`
+- `--ignore-role`: treat the group as a flat membership set and remove extras
+  regardless of role
+- `--members-csv` or `--members-sheet`: treat the input as the full desired
+  role map for the group
+- `--dry-run`: preview changes
+- `--confirm`: required for real changes unless `--dry-run` is set
 
-To delete a group:
-
-```sh
-gws delete group group@example.com --confirm
-```
-
-To manage group aliases:
-
-```sh
-gws print group-aliases group@example.com
-gws print group-aliases group@example.com --fields alias,primaryEmail --format csv
-gws create group-alias group@example.com alias@example.com
-gws delete group-alias group@example.com alias@example.com --confirm
-```
-
-To list, inspect, add, update, or remove group members:
-
-```sh
-gws print group-members group@example.com
-gws print group-members group@example.com --limit 25
-gws print group-members group@example.com --fields email,role --format csv
-gws print group-members group@example.com --fields email,role,status --sheet
-gws info group-member group@example.com user@example.com
-gws add group-member group@example.com user@example.com
-gws add group-member group@example.com user@example.com --role MANAGER
-gws update group-member group@example.com user@example.com --role OWNER
-gws sync group-members group@example.com --members ada@example.com,grace@example.com --dry-run
-gws sync group-members group@example.com --members ada@example.com --role MANAGER --dry-run
-gws sync group-members group@example.com --members-file ./members.txt --ignore-role --confirm
-gws sync group-members group@example.com --members-file ./members.txt --confirm
-gws sync group-members group@example.com --members-csv ./members.csv --dry-run
-gws sync group-members group@example.com --members-sheet https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit --sheet-range "Members!A:B" --confirm
-gws remove group-member group@example.com user@example.com
-```
-
-`sync group-members` compares the current direct membership against the desired
-email list. By default it is role-aware for the target role, which means it can
-add missing members, remove extra members with that role, and update existing
-members to the requested role. Use `--role OWNER|MANAGER|MEMBER` to target a
-specific role. Use `--ignore-role` to treat the group as a flat membership set
-and remove extras regardless of role. Use `--dry-run` first to inspect the
-plan. Unless `--dry-run` is set, `--confirm` is required because the command
-can remove existing members.
-
-For multi-role sync, use a CSV file or Google Sheet with at least an `email`
-column and, optionally, a `role` column:
+Structured CSV or Sheet input uses at least an `email` column and optionally a
+`role` column:
 
 ```text
 email,role
@@ -526,22 +397,70 @@ grace@example.com,MEMBER
 linus@example.com,MANAGER
 ```
 
-When you use `--members-csv` or `--members-sheet`, `gws` treats that input as
-the full desired membership map for the group and reconciles adds, removals,
-and role changes in one pass.
+### Org unit commands
 
-## Batch execution
+```text
+gws info ou /Engineering [--json]
+gws print ous [--fields ...] [--format text|csv|json] [--sheet] [--json]
+gws create ou --name NAME --parent /PATH [--description TEXT] [--json]
+gws update ou /PATH [--name NAME] [--parent /PATH] [--description TEXT] [--json]
+gws delete ou /PATH --confirm
+```
 
-`gws` now has initial batch groundwork for running multiple commands from a file
-with bounded concurrency:
+Examples:
 
 ```sh
-gws batch run --file ./commands.txt
-gws batch csv --file ./users.csv --command 'update user "{{email}}" --org-unit "{{orgUnit}}"'
-gws batch run --file ./commands.txt --workers 8
-gws batch run --file ./commands.txt --timeout 30s
-gws batch run --file ./commands.txt --dry-run
-gws batch run --file ./commands.txt --fail-fast
+./gws print ous
+./gws print ous --fields orgUnitPath,name,parentOrgUnitPath --sheet
+./gws info ou /Engineering
+./gws create ou --name Engineering --parent / --description "Engineering users"
+./gws update ou /Engineering --parent /Departments
+./gws delete ou /Engineering --confirm
+```
+
+### Gmail delegate commands
+
+```text
+gws print gmail-delegates user@example.com [--json]
+gws info gmail-delegate user@example.com delegate@example.com [--json]
+gws create gmail-delegate user@example.com delegate@example.com [--json]
+gws delete gmail-delegate user@example.com delegate@example.com --confirm
+```
+
+Examples:
+
+```sh
+./gws print gmail-delegates user@example.com
+./gws info gmail-delegate user@example.com delegate@example.com
+./gws create gmail-delegate user@example.com delegate@example.com
+./gws delete gmail-delegate user@example.com delegate@example.com --confirm
+```
+
+Important constraints:
+
+- these commands require a service account profile
+- domain-wide delegation must be configured
+- `Gmail API` must be enabled
+- OAuth user-token profiles cannot manage Gmail delegates
+
+### Batch commands
+
+```text
+gws batch run --file PATH [--workers N] [--timeout 30s] [--dry-run] [--fail-fast]
+gws batch csv --file PATH --command TEMPLATE [--workers N] [--timeout 30s] [--dry-run] [--fail-fast]
+gws batch template WORKFLOW [--example]
+```
+
+Examples:
+
+```sh
+./gws batch run --file ./commands.txt
+./gws batch run --file ./commands.txt --workers 8 --timeout 30s
+./gws batch run --file ./commands.txt --dry-run
+./gws batch run --file ./commands.txt --fail-fast
+./gws batch csv --file ./users.csv --command 'update user "{{email}}" --org-unit "{{orgUnit}}"'
+./gws batch template user-update --example
+./gws batch template group-member-sync --example
 ```
 
 Batch files are line-based:
@@ -554,105 +473,80 @@ update group eng@example.com --description "Primary engineering group"
 ```
 
 Rules:
+
 - blank lines and `#` comments are ignored
 - each non-comment line is one command
-- lines may start with `gws`, but do not have to
+- the `gws` prefix is optional inside batch files
 - simple single-quoted and double-quoted arguments are supported
-- execution uses a worker pool so independent commands can run concurrently
+- execution uses a worker pool
+- output is captured per command and printed deterministically in input order
 - `--timeout` limits each command individually
-- each command's output is captured and printed in input order
-- results are summarized after the batch completes
+- `--fail-fast` stops scheduling new work after the first failure
 
-For CSV-driven expansion, use `gws batch csv` with `{{column}}` placeholders:
+Built-in batch template workflows:
 
-```text
-email,orgUnit
-ada@example.com,/Engineering
-grace@example.com,/Sales
-```
-
-```sh
-gws batch csv --file ./users.csv --command 'update user "{{email}}" --org-unit "{{orgUnit}}"'
-```
-
-For common admin workflows, `gws` can print starter CSV helpers:
-
-```sh
-gws batch template user-update
-gws batch template user-update --example
-gws batch template group-member-sync --example
-gws batch template user-suspend --example
-gws batch template user-unsuspend --example
-gws batch template user-make-admin --example
-gws batch template user-revoke-admin --example
-gws batch template group-create --example
-gws batch template group-member-add --example
-gws batch template group-member-remove --example
-gws batch template ou-create --example
-gws batch template ou-update --example
-```
-
-Current helper workflows:
 - `user-update`
+- `user-suspend`
 - `user-unsuspend`
 - `user-make-admin`
 - `user-revoke-admin`
-- `group-member-sync`
-- `user-suspend`
 - `group-create`
 - `group-member-add`
 - `group-member-remove`
+- `group-member-sync`
 - `ou-create`
 - `ou-update`
 
-To list and inspect organizational units:
+## Output Modes
+
+`gws` supports:
+
+- human-readable text
+- JSON via `--json` or `--format json`
+- CSV via `--format csv`
+- Google Sheets export via `--sheet` on supported list commands
+
+List-style commands support combinations of:
+
+- `--fields`
+- `--format text|csv|json`
+- `--json`
+- `--sheet`
+
+Sheets export is currently implemented for these list commands:
+
+- `print users`
+- `print groups`
+- `print group-members`
+- `print ous`
+- `print user-aliases`
+- `print group-aliases`
+- `print domains`
+- `print domain-aliases`
+
+`--sheet` creates a new spreadsheet, writes headers plus rows, and prints the
+URL.
+
+## Error Handling
+
+`gws` tries to translate common Google failures into actionable guidance. The
+current implementation distinguishes between:
+
+- insufficient scopes
+- disabled APIs
+- invalid query or payload errors
+- OAuth credential problems
+- service account / domain-wide delegation problems
+
+If Google rejects a request after new features were added, rerun:
 
 ```sh
-gws print ous
-gws print ous --fields orgUnitPath,name --format csv
-gws print ous --fields orgUnitPath,name,parentOrgUnitPath --sheet
-gws print ous --json
-gws info ou /
-gws info ou /Engineering
-gws info ou /Engineering --json
+./gws setup
 ```
 
-To create or update organizational units:
+## Environment overrides
 
-```sh
-gws create ou --name Engineering --parent /
-gws create ou --name Engineering --parent / --description "Engineering users"
-gws update ou /Engineering --name ProductEngineering
-gws update ou /Engineering --parent /Departments
-gws update ou /Engineering --description "Engineering users"
-```
-
-To delete an organizational unit:
-
-```sh
-gws delete ou /Engineering --confirm
-```
-
-To manage Gmail delegates, use a service account profile with domain-wide
-delegation:
-
-```sh
-gws print gmail-delegates user@example.com
-gws info gmail-delegate user@example.com delegate@example.com
-gws create gmail-delegate user@example.com delegate@example.com
-gws delete gmail-delegate user@example.com delegate@example.com --confirm
-```
-
-These commands require the Gmail API plus the Gmail delegation scopes and are
-not available through OAuth user-token profiles.
-
-If you authorized `gws` before a new command or scope existed, rerun `gws setup`
-so the OAuth token or domain-wide delegation grant includes the current scope
-list.
-
-## Environment Overrides
-
-The config path and active profile can be overridden with:
+These environment variables are supported:
 
 ```text
 GWS_CONFIG
@@ -662,8 +556,38 @@ GWS_ADMIN_SUBJECT
 GWS_CREDENTIALS_FILE
 ```
 
-## Not Implemented Yet
+## Current limitations
 
-- group membership sync command
-- GAM grammar compatibility beyond the small first command set
-- batch and CSV execution
+Current limitations are important because they affect operator expectations:
+
+- `gws setup` does not yet create Google Cloud projects, service accounts, OAuth
+  clients, or Admin Console domain-wide delegation entries for you
+- Gmail support currently covers delegate administration only, not messages,
+  labels, forwarding, filters, or mailbox content operations
+- Google Sheets export currently creates new spreadsheets; it does not append to
+  an existing sheet
+- batch execution runs commands concurrently, but it does not yet model
+  dependencies between commands
+- there is no built-in live integration test harness for a real Workspace
+  tenant yet
+- command wording is GAM-inspired, but exact GAM grammar compatibility is not a
+  goal in this phase
+- areas like Reports, Drive ownership transfer, Calendar, Chrome management,
+  Vault, and device management are not implemented yet
+
+## What’s next
+
+Near-term work is expected to stay focused on operational depth rather than a
+huge jump in surface area. Likely next slices:
+
+1. stronger setup automation for Google Cloud-side bootstrap, while still being
+   explicit about the Admin Console steps that cannot be skipped
+2. live smoke and integration testing against a real Workspace tenant
+3. more Gmail admin workflows and batch helpers built on the current auth model
+4. continued expansion into additional Google Workspace admin domains only after
+   setup, auth, output, and test coverage stay coherent
+
+## Additional docs
+
+- [Architecture](docs/architecture.md)
+- [Compatibility notes](docs/compatibility.md)
